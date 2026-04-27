@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CoreGraphics
 import PDFKit
 import XCTest
@@ -54,6 +55,28 @@ final class DocumentWorkspaceTests: XCTestCase {
     }
 
     @MainActor
+    func testChangingSignaturePatternToTextUsesRescannedTextBounds() throws {
+        let document = try makeTextPDF("Signature: ____________________", at: CGPoint(x: 72, y: 680))
+        guard let detected = FieldDetector.detect(in: document).first(where: { $0.label == "Signature" }) else {
+            XCTFail("Expected signature pattern field")
+            return
+        }
+        XCTAssertEqual(detected.kind, .signature)
+
+        let workspace = DocumentWorkspace()
+        workspace.document = document
+        workspace.fields = [detected]
+        workspace.selectedFieldID = detected.id
+
+        workspace.updateCurrentFieldKind(.text)
+
+        XCTAssertEqual(workspace.fields[0].kind, .text)
+        XCTAssertEqual(workspace.fields[0].source, .user)
+        XCTAssertLessThan(workspace.fields[0].bounds.height, detected.bounds.height)
+        XCTAssertGreaterThan(workspace.fields[0].bounds.width, 80)
+    }
+
+    @MainActor
     func testCheckboxBoundsStaySquareWhenEdited() throws {
         let workspace = DocumentWorkspace()
         workspace.document = try makeBlankPDF()
@@ -82,6 +105,36 @@ final class DocumentWorkspaceTests: XCTestCase {
             throw TestError.failedToCreatePDF
         }
         context.beginPDFPage(nil)
+        context.endPDFPage()
+        context.closePDF()
+
+        guard let document = PDFDocument(data: data as Data) else {
+            throw TestError.failedToCreatePDF
+        }
+        return document
+    }
+
+    private func makeTextPDF(_ text: String, at point: CGPoint) throws -> PDFDocument {
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
+            throw TestError.failedToCreatePDF
+        }
+        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+            throw TestError.failedToCreatePDF
+        }
+
+        context.beginPDFPage(nil)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        (text as NSString).draw(
+            at: point,
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: 14),
+                .foregroundColor: NSColor.black
+            ]
+        )
+        NSGraphicsContext.restoreGraphicsState()
         context.endPDFPage()
         context.closePDF()
 

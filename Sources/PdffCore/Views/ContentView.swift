@@ -1,3 +1,4 @@
+import AppKit
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -72,6 +73,9 @@ public struct ContentView: View {
                 showingSignatureSheet = false
             }
         }
+        .sheet(item: $workspace.exportResult) { result in
+            ExportCompleteSheet(result: result)
+        }
         .alert(item: $workspace.alert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -79,6 +83,61 @@ public struct ContentView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+}
+
+private struct ExportCompleteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var result: ExportResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.green)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("PDF Saved")
+                        .font(.title3.weight(.semibold))
+                    Text(result.url.lastPathComponent)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Text(result.url.deletingLastPathComponent().path)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            HStack {
+                Button {
+                    NSWorkspace.shared.open(result.url)
+                    dismiss()
+                } label: {
+                    Label("Open PDF", systemImage: "doc.text.magnifyingglass")
+                }
+
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([result.url])
+                    dismiss()
+                } label: {
+                    Label("Reveal", systemImage: "folder")
+                }
+
+                Spacer()
+
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 460)
     }
 }
 

@@ -13,6 +13,7 @@ public final class DocumentWorkspace: ObservableObject {
     @Published public var selectedSignatureID: UUID?
     @Published public var placedSignatures: [PlacedSignature] = []
     @Published public var alert: WorkspaceAlert?
+    @Published public var exportResult: ExportResult?
     @Published public var isAILabeling = false
     @Published public var aiProvider: AIProviderChoice = .openAI
     @Published public var aiAPIKey = ""
@@ -134,7 +135,7 @@ public final class DocumentWorkspace: ObservableObject {
         do {
             try writeFlattened(document: document, to: url)
             Haptics.complete()
-            alert = WorkspaceAlert(title: "Export Complete", message: url.path)
+            exportResult = ExportResult(url: url)
         } catch {
             alert = WorkspaceAlert(title: "Export Failed", message: error.localizedDescription)
         }
@@ -228,9 +229,10 @@ public final class DocumentWorkspace: ObservableObject {
         let oldKind = updated.kind
         guard oldKind != kind else { return }
 
+        let refinedBounds = document.flatMap { FieldDetector.refinedBounds(for: updated, as: kind, in: $0) }
         updated.kind = kind
         updated.options = []
-        updated.bounds = boundsForKindChange(from: oldKind, to: kind, bounds: updated.bounds, pageIndex: updated.pageIndex)
+        updated.bounds = refinedBounds ?? boundsForKindChange(from: oldKind, to: kind, bounds: updated.bounds, pageIndex: updated.pageIndex)
 
         switch kind {
         case .checkbox:
@@ -570,7 +572,6 @@ public final class DocumentWorkspace: ObservableObject {
     }
 
     private func editableCopy(of field: DetectedField) -> DetectedField {
-        guard field.source == .widget else { return field }
         var copy = field
         copy.source = .user
         copy.widgetFieldName = nil
@@ -676,5 +677,14 @@ public struct WorkspaceAlert: Identifiable {
     public init(title: String, message: String) {
         self.title = title
         self.message = message
+    }
+}
+
+public struct ExportResult: Identifiable, Equatable {
+    public let id = UUID()
+    public var url: URL
+
+    public init(url: URL) {
+        self.url = url
     }
 }
