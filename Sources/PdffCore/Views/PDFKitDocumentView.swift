@@ -40,6 +40,7 @@ public struct PDFKitDocumentView: NSViewRepresentable {
             workspace.selectField(id: id)
         }
         nsView.overlayView.needsDisplay = true
+        nsView.pdfView.setNeedsDisplay(nsView.pdfView.bounds)
 
         if context.coordinator.focusedFieldID != workspace.selectedFieldID {
             context.coordinator.focusedFieldID = workspace.selectedFieldID
@@ -135,6 +136,11 @@ public final class FieldOverlayView: NSView {
             drawHighlight(rect: rect, selected: field.id == selectedFieldID, kind: field.kind)
         }
 
+        for field in fields where field.source != .widget {
+            guard let rect = rect(for: field, in: pdfView), rect.intersects(dirtyRect) else { continue }
+            drawValue(for: field, in: rect)
+        }
+
         for placed in placedSignatures {
             guard
                 let rect = rect(pageIndex: placed.pageIndex, bounds: placed.bounds, in: pdfView),
@@ -185,5 +191,65 @@ public final class FieldOverlayView: NSView {
         baseColor.withAlphaComponent(selected ? 0.95 : 0.42).setStroke()
         path.lineWidth = selected ? 2.0 : 1.0
         path.stroke()
+    }
+
+    private func drawValue(for field: DetectedField, in rect: CGRect) {
+        switch field.kind {
+        case .checkbox:
+            guard field.boolValue else { return }
+            drawCheckbox(in: rect)
+        case .text, .date, .choice:
+            let value = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return }
+            drawText(value, in: rect)
+        case .signature:
+            break
+        }
+    }
+
+    private func drawText(_ text: String, in rect: CGRect) {
+        let bounds = rect.insetBy(dx: 4, dy: 2)
+        guard bounds.width > 2, bounds.height > 2 else { return }
+        let fontSize = fittedFontSize(for: text, in: bounds)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byClipping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: fontSize),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph
+        ]
+        let measured = (text as NSString).size(withAttributes: attributes)
+        let drawRect = CGRect(
+            x: bounds.minX,
+            y: bounds.midY - measured.height / 2,
+            width: bounds.width,
+            height: measured.height + 2
+        )
+        (text as NSString).draw(in: drawRect, withAttributes: attributes)
+    }
+
+    private func drawCheckbox(in rect: CGRect) {
+        let bounds = rect.insetBy(dx: max(2, rect.width * 0.18), dy: max(2, rect.height * 0.18))
+        let path = NSBezierPath()
+        path.move(to: CGPoint(x: bounds.minX, y: bounds.midY))
+        path.line(to: CGPoint(x: bounds.midX - 1, y: bounds.minY))
+        path.line(to: CGPoint(x: bounds.maxX, y: bounds.maxY))
+        path.lineWidth = 2
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        NSColor.controlAccentColor.setStroke()
+        path.stroke()
+    }
+
+    private func fittedFontSize(for text: String, in bounds: CGRect) -> CGFloat {
+        var size = min(max(bounds.height * 0.72, 8), 18)
+        while size > 6 {
+            let measured = (text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size)])
+            if measured.width <= bounds.width && measured.height <= bounds.height + 2 {
+                return size
+            }
+            size -= 0.5
+        }
+        return 6
     }
 }

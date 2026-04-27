@@ -115,12 +115,18 @@ public final class DocumentWorkspace: ObservableObject {
 
     public func updateCurrentValue(_ value: String) {
         guard let currentIndex else { return }
-        fields[currentIndex].value = value
+        var updated = fields[currentIndex]
+        updated.value = value
+        fields[currentIndex] = updated
+        applyWidgetValue(updated)
     }
 
     public func updateCurrentBool(_ value: Bool) {
         guard let currentIndex else { return }
-        fields[currentIndex].boolValue = value
+        var updated = fields[currentIndex]
+        updated.boolValue = value
+        fields[currentIndex] = updated
+        applyWidgetValue(updated)
     }
 
     public func updateCurrentChoice(_ value: String) {
@@ -197,7 +203,9 @@ public final class DocumentWorkspace: ObservableObject {
 
         placedSignatures.append(PlacedSignature(assetID: asset.id, pageIndex: target.pageIndex, bounds: bounds))
         if let currentIndex, fields[currentIndex].kind == .signature {
-            fields[currentIndex].value = asset.id.uuidString
+            var updated = fields[currentIndex]
+            updated.value = asset.id.uuidString
+            fields[currentIndex] = updated
             nextField()
         }
         Haptics.step()
@@ -221,6 +229,34 @@ public final class DocumentWorkspace: ObservableObject {
     private func defaultExportName() -> String {
         let base = documentURL?.deletingPathExtension().lastPathComponent ?? "filled"
         return "\(base)-filled.pdf"
+    }
+
+    private func applyWidgetValue(_ field: DetectedField) {
+        guard field.source == .widget, let annotation = annotation(for: field) else { return }
+        switch field.kind {
+        case .checkbox:
+            annotation.buttonWidgetStateString = field.boolValue ? "Yes" : "Off"
+        case .text, .date, .choice:
+            annotation.widgetStringValue = field.value
+        case .signature:
+            break
+        }
+    }
+
+    private func annotation(for field: DetectedField) -> PDFAnnotation? {
+        if let fieldName = field.widgetFieldName {
+            for pageIndex in 0..<(document?.pageCount ?? 0) {
+                guard let page = document?.page(at: pageIndex) else { continue }
+                if let annotation = page.annotations.first(where: { $0.fieldName == fieldName }) {
+                    return annotation
+                }
+            }
+        }
+
+        guard let page = document?.page(at: field.pageIndex) else { return nil }
+        return page.annotations.first { annotation in
+            annotation.type == PDFAnnotationSubtype.widget.rawValue && annotation.bounds.intersects(field.bounds)
+        }
     }
 }
 
