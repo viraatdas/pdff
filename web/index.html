@@ -6,27 +6,37 @@
     <title>pdff</title>
     <meta
       name="description"
-      content="A native macOS PDF viewer, filler, and signature tool."
+      content="Native Mac PDF viewer that lets you edit, fill, and add signatures quickly."
     />
     <meta property="og:title" content="pdff" />
     <meta
       property="og:description"
-      content="A native macOS PDF viewer, filler, and signature tool."
+      content="Native Mac PDF viewer that lets you edit, fill, and add signatures quickly."
     />
     <meta property="og:image" content="/app-icon.png" />
     <link rel="icon" href="/app-icon.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="pdff home">
+        <img src="/app-icon.png" alt="" width="36" height="36" />
+        <span>pdff</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="https://github.com/viraatdas/pdff">GitHub</a>
+      </nav>
+    </header>
+
     <main>
-      <section class="hero" aria-labelledby="title">
-        <div class="hero-copy">
-          <img class="app-icon" src="/app-icon.png" alt="" width="112" height="112" />
-          <p class="eyebrow">Native Mac PDF fill and sign</p>
+      <section class="intro" aria-labelledby="title">
+        <div class="intro-copy">
+          <p class="eyebrow">Native macOS PDF fill and sign</p>
           <h1 id="title">pdff</h1>
           <p class="lede">
-            Open a PDF, step through detected fields, type answers, place signatures,
-            and save a flattened copy without changing document reflow.
+            A fast Mac PDF editor for the annoying forms that should take seconds:
+            fill detected fields, fix missed boxes, add signatures, and export a clean PDF.
           </p>
           <div class="actions">
             <a
@@ -35,53 +45,112 @@
             >
               Download for macOS
             </a>
-            <a class="secondary-action" href="https://github.com/viraatdas/pdff">
-              GitHub
+            <a class="secondary-action" href="https://github.com/viraatdas/pdff/releases/latest">
+              Latest release
             </a>
           </div>
+          <dl class="facts" aria-label="App details">
+            <div>
+              <dt>Platform</dt>
+              <dd>macOS 15+</dd>
+            </div>
+            <div>
+              <dt>Build</dt>
+              <dd>Native SwiftUI + PDFKit</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>Open source</dd>
+            </div>
+          </dl>
         </div>
 
-        <div class="product-panel" aria-hidden="true">
-          <div class="window-bar">
+        <div class="app-preview" aria-label="pdff app preview">
+          <div class="traffic" aria-hidden="true">
             <span></span>
             <span></span>
             <span></span>
           </div>
-          <div class="viewer">
-            <aside>
-              <div class="small-line"></div>
-              <div class="field active"></div>
-              <div class="field"></div>
-              <div class="field checkbox"></div>
-            </aside>
-            <div class="page">
-              <div class="line short"></div>
-              <div class="fillable selected"></div>
-              <div class="line"></div>
-              <div class="fillable"></div>
-              <div class="check-row">
-                <span class="box">×</span>
-                <span></span>
+          <div class="app-frame">
+            <aside class="sidebar" aria-hidden="true">
+              <div class="sidebar-title"></div>
+              <div class="queue active">
+                <strong>Full Name</strong>
+                <span>Field 1 of 8</span>
               </div>
-              <div class="signature">Viraat</div>
-            </div>
+              <div class="queue">
+                <strong>Date</strong>
+                <span>Field 2 of 8</span>
+              </div>
+              <div class="queue compact"></div>
+              <div class="signature-card">
+                <span>Signature</span>
+                <b>Viraat</b>
+              </div>
+            </aside>
+            <section class="document" aria-hidden="true">
+              <div class="paper">
+                <div class="paper-row short"></div>
+                <div class="field-line selected">
+                  <span>Viraat Das</span>
+                </div>
+                <div class="paper-row"></div>
+                <div class="field-line"></div>
+                <div class="check-row">
+                  <span class="box">X</span>
+                  <i></i>
+                </div>
+                <div class="signature-line">Viraat</div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
 
-      <section class="details" aria-label="Highlights">
-        <div>
-          <h2>Guided Queue</h2>
-          <p>Detected fields stay ordered by page, with one focused target at a time.</p>
+      <section class="workflow" id="features" aria-label="Workflow">
+        <div class="section-heading">
+          <h2>Built for real forms</h2>
+          <p>
+            pdff keeps the original PDF layout intact and writes your answers as a
+            clean overlay, so exports do not reflow the document.
+          </p>
         </div>
-        <div>
-          <h2>Manual Fixes</h2>
-          <p>Add text boxes or checkbox squares when a PDF has odd layout.</p>
+        <div class="feature-grid">
+          <article>
+            <span>01</span>
+            <h3>Detect</h3>
+            <p>Find form fields, blank lines, date fields, checkboxes, and signature areas.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Correct</h3>
+            <p>Change a mistaken field type, resize it, or add a missing text box or checkbox.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Sign</h3>
+            <p>Draw or type a reusable signature, then move and resize it directly on the page.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Export</h3>
+            <p>Save as a new PDF or overwrite the original after confirmation.</p>
+          </article>
         </div>
+      </section>
+
+      <section class="closing" aria-label="Download">
+        <img src="/app-icon.png" alt="" width="58" height="58" />
         <div>
-          <h2>Native Signatures</h2>
-          <p>Draw or type once, then move and resize signatures directly on the PDF.</p>
+          <h2>Download the latest build</h2>
+          <p>Unsigned early build. macOS may ask you to confirm before opening it.</p>
         </div>
+        <a
+          class="primary-action"
+          href="https://github.com/viraatdas/pdff/releases/latest/download/pdff-macos.zip"
+        >
+          Download
+        </a>
       </section>
     </main>
   </body>
