@@ -40,19 +40,24 @@ public struct PDFKitDocumentView: NSViewRepresentable {
         nsView.overlayView.signatureData = Dictionary(
             uniqueKeysWithValues: workspace.signatureStore.signatures.map { ($0.id, $0.pngData) }
         )
-        nsView.overlayView.onSelectField = { id in
-            workspace.selectField(id: id)
+        nsView.overlayView.onSelectField = { [weak workspace] id in
+            workspace?.selectField(id: id)
         }
-        nsView.onPageChanged = { index in
-            workspace.updateVisiblePageIndex(index)
+        nsView.onPageChanged = { [weak workspace] index in
+            workspace?.updateVisiblePageIndex(index)
         }
         nsView.overlayView.needsDisplay = true
-        nsView.pdfView.setNeedsDisplay(nsView.pdfView.bounds)
 
         if context.coordinator.focusedFieldID != workspace.selectedFieldID {
             context.coordinator.focusedFieldID = workspace.selectedFieldID
             focusSelectedField(in: nsView)
         }
+    }
+
+    public static func dismantleNSView(_ nsView: PDFCanvasView, coordinator: Coordinator) {
+        nsView.prepareForDismantle()
+        coordinator.document = nil
+        coordinator.focusedFieldID = nil
     }
 
     private func focusSelectedField(in view: PDFCanvasView) {
@@ -89,6 +94,7 @@ public final class PDFCanvasView: NSView {
     public let overlayView = FieldOverlayView()
     public var onPageChanged: ((Int) -> Void)?
     private weak var observedClipView: NSClipView?
+    private var lastPublishedPageIndex: Int?
 
     override public init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -134,9 +140,24 @@ public final class PDFCanvasView: NSView {
 
     @objc private func pdfViewChanged() {
         if let page = pdfView.currentPage, let index = pdfView.document?.index(for: page) {
-            onPageChanged?(index)
+            if index != lastPublishedPageIndex {
+                lastPublishedPageIndex = index
+                onPageChanged?(index)
+            }
         }
         overlayView.needsDisplay = true
+    }
+
+    public func prepareForDismantle() {
+        NotificationCenter.default.removeObserver(self)
+        onPageChanged = nil
+        observedClipView = nil
+        overlayView.onSelectField = nil
+        overlayView.pdfView = nil
+        overlayView.fields = []
+        overlayView.placedSignatures = []
+        overlayView.signatureData = [:]
+        pdfView.document = nil
     }
 
     public func goToTopOfDocument() {
@@ -176,6 +197,7 @@ public final class PDFCanvasView: NSView {
 public final class PannablePDFView: PDFView {
     private var lastDragLocation: CGPoint?
     private var didDrag = false
+    private var pushedClosedHandCursor = false
 
     override public func resetCursorRects() {
         super.resetCursorRects()
@@ -186,6 +208,7 @@ public final class PannablePDFView: PDFView {
         lastDragLocation = event.locationInWindow
         didDrag = false
         NSCursor.closedHand.push()
+        pushedClosedHandCursor = true
     }
 
     override public func mouseDragged(with event: NSEvent) {
@@ -212,15 +235,24 @@ public final class PannablePDFView: PDFView {
     }
 
     override public func mouseUp(with event: NSEvent) {
-        if NSCursor.current == .closedHand {
-            NSCursor.pop()
-        }
+        popClosedHandCursorIfNeeded()
         if !didDrag {
             super.mouseDown(with: event)
             super.mouseUp(with: event)
         }
         lastDragLocation = nil
         didDrag = false
+    }
+
+    override public func mouseExited(with event: NSEvent) {
+        popClosedHandCursorIfNeeded()
+        super.mouseExited(with: event)
+    }
+
+    private func popClosedHandCursorIfNeeded() {
+        guard pushedClosedHandCursor else { return }
+        NSCursor.pop()
+        pushedClosedHandCursor = false
     }
 }
 
@@ -231,6 +263,8 @@ public final class FieldOverlayView: NSView {
     var placedSignatures: [PlacedSignature] = []
     var signatureData: [UUID: Data] = [:]
     var onSelectField: ((UUID) -> Void)?
+    private var signatureImageCache: [UUID: NSImage] = [:]
+    private var signatureImageCacheKeys = Set<UUID>()
 
     override public var isOpaque: Bool { false }
 
@@ -251,13 +285,29 @@ public final class FieldOverlayView: NSView {
         for placed in placedSignatures {
             guard
                 let rect = rect(pageIndex: placed.pageIndex, bounds: placed.bounds, in: pdfView),
-                let data = signatureData[placed.assetID],
-                let image = NSImage(data: data)
+                let image = signatureImage(for: placed.assetID)
             else { continue }
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 0.92)
             NSColor.systemTeal.withAlphaComponent(0.85).setStroke()
             NSBezierPath(roundedRect: rect.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).stroke()
         }
+    }
+
+    private func signatureImage(for id: UUID) -> NSImage? {
+        let keys = Set(signatureData.keys)
+        if keys != signatureImageCacheKeys {
+            signatureImageCache = signatureImageCache.filter { keys.contains($0.key) }
+            signatureImageCacheKeys = keys
+        }
+
+        if let cached = signatureImageCache[id] {
+            return cached
+        }
+        guard let data = signatureData[id], let image = NSImage(data: data) else {
+            return nil
+        }
+        signatureImageCache[id] = image
+        return image
     }
 
     override public func mouseDown(with event: NSEvent) {
