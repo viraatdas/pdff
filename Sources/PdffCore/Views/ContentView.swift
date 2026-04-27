@@ -114,6 +114,7 @@ private struct HeaderView: View {
 
 private struct CurrentFieldEditor: View {
     @EnvironmentObject private var workspace: DocumentWorkspace
+    @FocusState private var fieldInputFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -179,6 +180,10 @@ private struct CurrentFieldEditor: View {
         }
         .padding(12)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .onAppear(perform: focusIfEditable)
+        .onChange(of: workspace.selectedFieldID) { _, _ in
+            focusIfEditable()
+        }
     }
 
     @ViewBuilder
@@ -193,11 +198,14 @@ private struct CurrentFieldEditor: View {
 
         case .choice:
             if field.options.isEmpty {
-                TextField("Choice", text: Binding(
+                TextField("", text: Binding(
                     get: { workspace.currentField?.value ?? "" },
                     set: { workspace.updateCurrentChoice($0) }
                 ))
                 .textFieldStyle(.roundedBorder)
+                .font(.title3)
+                .focused($fieldInputFocused)
+                .onSubmit { workspace.nextField() }
             } else {
                 Picker("Choice", selection: Binding(
                     get: { workspace.currentField?.value ?? field.options.first ?? "" },
@@ -210,11 +218,14 @@ private struct CurrentFieldEditor: View {
             }
 
         case .date:
-            TextField("Date", text: Binding(
+            TextField("", text: Binding(
                 get: { workspace.currentField?.value ?? "" },
                 set: { workspace.updateCurrentValue($0) }
             ))
             .textFieldStyle(.roundedBorder)
+            .font(.title3)
+            .focused($fieldInputFocused)
+            .onSubmit { workspace.nextField() }
 
         case .signature:
             Text("Choose a saved signature below, then place it on this field.")
@@ -222,11 +233,26 @@ private struct CurrentFieldEditor: View {
                 .foregroundStyle(.secondary)
 
         case .text:
-            TextField("Value", text: Binding(
+            TextField("", text: Binding(
                 get: { workspace.currentField?.value ?? "" },
                 set: { workspace.updateCurrentValue($0) }
             ))
             .textFieldStyle(.roundedBorder)
+            .font(.title3)
+            .focused($fieldInputFocused)
+            .onSubmit { workspace.nextField() }
+        }
+    }
+
+    private func focusIfEditable() {
+        let shouldFocus = switch workspace.currentField?.kind {
+        case .text, .date, .choice:
+            true
+        case .checkbox, .signature, nil:
+            false
+        }
+        DispatchQueue.main.async {
+            fieldInputFocused = shouldFocus
         }
     }
 }

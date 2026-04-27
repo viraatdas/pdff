@@ -18,6 +18,13 @@ A native macOS PDF viewer, filler, and signature tool built with SwiftUI, AppKit
 swift run pdff
 ```
 
+## Build App Bundle
+
+```sh
+Scripts/build_app_bundle.sh
+open .build/Pdff.app
+```
+
 ## Test
 
 ```sh

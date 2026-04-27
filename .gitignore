@@ -1,6 +1,7 @@
 .build/
 .swiftpm/
 DerivedData/
+Assets/AppIcon.iconset/
 *.xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.dSYM/

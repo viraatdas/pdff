@@ -18,6 +18,8 @@ public struct PDFKitDocumentView: NSViewRepresentable {
         view.pdfView.displayMode = .singlePageContinuous
         view.pdfView.displayDirection = .vertical
         view.pdfView.autoScales = true
+        view.pdfView.displaysPageBreaks = true
+        view.pdfView.pageBreakMargins = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
         view.pdfView.backgroundColor = .windowBackgroundColor
         view.overlayView.pdfView = view.pdfView
         return view
@@ -27,7 +29,9 @@ public struct PDFKitDocumentView: NSViewRepresentable {
         if context.coordinator.document !== workspace.document {
             nsView.pdfView.document = workspace.document
             nsView.pdfView.autoScales = true
+            nsView.goToTopOfDocument()
             context.coordinator.document = workspace.document
+            context.coordinator.focusedFieldID = workspace.selectedFieldID
         }
 
         nsView.overlayView.fields = workspace.fields
@@ -81,9 +85,10 @@ public struct PDFKitDocumentView: NSViewRepresentable {
 }
 
 public final class PDFCanvasView: NSView {
-    public let pdfView = PDFView()
+    public let pdfView = PannablePDFView()
     public let overlayView = FieldOverlayView()
     public var onPageChanged: ((Int) -> Void)?
+    private weak var observedClipView: NSClipView?
 
     override public init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -103,6 +108,12 @@ public final class PDFCanvasView: NSView {
             name: .PDFViewPageChanged,
             object: pdfView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(pdfViewChanged),
+            name: .PDFViewVisiblePagesChanged,
+            object: pdfView
+        )
     }
 
     required init?(coder: NSCoder) {
@@ -117,6 +128,7 @@ public final class PDFCanvasView: NSView {
         super.layout()
         pdfView.frame = bounds
         overlayView.frame = bounds
+        observeScrollBoundsIfNeeded()
         overlayView.needsDisplay = true
     }
 
@@ -125,6 +137,90 @@ public final class PDFCanvasView: NSView {
             onPageChanged?(index)
         }
         overlayView.needsDisplay = true
+    }
+
+    public func goToTopOfDocument() {
+        guard let page = pdfView.document?.page(at: 0) else { return }
+        let pageBounds = page.bounds(for: pdfView.displayBox)
+        let destination = PDFDestination(
+            page: page,
+            at: CGPoint(x: pageBounds.minX, y: pageBounds.maxY)
+        )
+        pdfView.go(to: destination)
+        overlayView.needsDisplay = true
+    }
+
+    private func observeScrollBoundsIfNeeded() {
+        guard let clipView = pdfView.documentView?.enclosingScrollView?.contentView else { return }
+        guard observedClipView !== clipView else { return }
+
+        if let observedClipView {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.boundsDidChangeNotification,
+                object: observedClipView
+            )
+        }
+
+        observedClipView = clipView
+        clipView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(pdfViewChanged),
+            name: NSView.boundsDidChangeNotification,
+            object: clipView
+        )
+    }
+}
+
+public final class PannablePDFView: PDFView {
+    private var lastDragLocation: CGPoint?
+    private var didDrag = false
+
+    override public func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .openHand)
+    }
+
+    override public func mouseDown(with event: NSEvent) {
+        lastDragLocation = event.locationInWindow
+        didDrag = false
+        NSCursor.closedHand.push()
+    }
+
+    override public func mouseDragged(with event: NSEvent) {
+        guard
+            let lastDragLocation,
+            let clipView = documentView?.enclosingScrollView?.contentView,
+            let documentView
+        else { return }
+
+        let current = event.locationInWindow
+        let delta = CGPoint(x: current.x - lastDragLocation.x, y: current.y - lastDragLocation.y)
+        guard abs(delta.x) > 0.1 || abs(delta.y) > 0.1 else { return }
+
+        var origin = clipView.bounds.origin
+        origin.x -= delta.x
+        origin.y += delta.y
+        origin.x = min(max(origin.x, documentView.bounds.minX), max(documentView.bounds.maxX - clipView.bounds.width, documentView.bounds.minX))
+        origin.y = min(max(origin.y, documentView.bounds.minY), max(documentView.bounds.maxY - clipView.bounds.height, documentView.bounds.minY))
+
+        clipView.scroll(to: origin)
+        enclosingScrollView?.reflectScrolledClipView(clipView)
+        self.lastDragLocation = current
+        didDrag = true
+    }
+
+    override public func mouseUp(with event: NSEvent) {
+        if NSCursor.current == .closedHand {
+            NSCursor.pop()
+        }
+        if !didDrag {
+            super.mouseDown(with: event)
+            super.mouseUp(with: event)
+        }
+        lastDragLocation = nil
+        didDrag = false
     }
 }
 
