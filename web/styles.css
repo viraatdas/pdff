@@ -186,41 +186,6 @@ h1 {
   background: #f9fafb;
 }
 
-.facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  max-width: 620px;
-  margin: 34px 0 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.facts div {
-  min-width: 0;
-  padding: 16px 18px 16px 0;
-}
-
-.facts div + div {
-  padding-left: 18px;
-  border-left: 1px solid var(--line);
-}
-
-.facts dt {
-  margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.facts dd {
-  margin: 0;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 720;
-  line-height: 1.35;
-}
-
 .app-preview {
   overflow: hidden;
   border: 1px solid #c6cfdb;
@@ -552,20 +517,6 @@ h1 {
 
   .lede {
     font-size: 18px;
-  }
-
-  .facts {
-    grid-template-columns: 1fr;
-  }
-
-  .facts div {
-    padding: 14px 0;
-  }
-
-  .facts div + div {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-    padding-left: 0;
   }
 
   .app-frame {
