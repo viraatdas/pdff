@@ -6,13 +6,22 @@ public struct PatternCandidate: Equatable {
     public var kind: FieldKind
     public var label: String
     public var context: String
+    public var isLabelOnly: Bool
 
-    public init(fullRange: NSRange, fillRange: NSRange, kind: FieldKind, label: String, context: String) {
+    public init(
+        fullRange: NSRange,
+        fillRange: NSRange,
+        kind: FieldKind,
+        label: String,
+        context: String,
+        isLabelOnly: Bool = false
+    ) {
         self.fullRange = fullRange
         self.fillRange = fillRange
         self.kind = kind
         self.label = label
         self.context = context
+        self.isLabelOnly = isLabelOnly
     }
 }
 
@@ -26,6 +35,7 @@ public enum PDFPatternScanner {
         candidates.append(contentsOf: scanLabelledBlanks(in: nsText, fullRange: fullRange))
         candidates.append(contentsOf: scanCheckboxes(in: nsText, fullRange: fullRange))
         candidates.append(contentsOf: scanStandaloneBlanks(in: nsText, fullRange: fullRange, existing: candidates))
+        candidates.append(contentsOf: scanLabelOnlyOpenings(in: nsText, fullRange: fullRange, existing: candidates))
 
         return candidates
             .sorted { $0.fillRange.location < $1.fillRange.location }
@@ -82,6 +92,41 @@ public enum PDFPatternScanner {
                 kind: FieldKind.inferred(from: label),
                 label: label.isEmpty ? "Field" : label,
                 context: context(around: match.range, in: nsText)
+            )
+        }
+    }
+
+    private static func scanLabelOnlyOpenings(
+        in nsText: NSString,
+        fullRange: NSRange,
+        existing: [PatternCandidate]
+    ) -> [PatternCandidate] {
+        let labelWords = [
+            "name", "full name", "first name", "last name", "email", "e-mail", "phone", "telephone",
+            "address", "city", "state", "zip", "postal code", "date", "dob", "birth date",
+            "signature", "sign", "initial", "title", "company", "employer", "ssn"
+        ]
+        let alternation = labelWords
+            .map { NSRegularExpression.escapedPattern(for: $0) }
+            .joined(separator: "|")
+        let pattern = #"(?im)(^|\n)[ \t]*(("# + alternation + #")(?:[ \t]+[A-Za-z][A-Za-z.'-]{1,18}){0,3})[ \t]*:[ \t]*(?=\n|$)"#
+
+        return matches(pattern: pattern, in: nsText, range: fullRange).compactMap { match in
+            guard match.numberOfRanges >= 3 else { return nil }
+            let labelRange = match.range(at: 2)
+            guard !existing.contains(where: { NSIntersectionRange($0.fullRange, match.range).length > 0 }) else {
+                return nil
+            }
+
+            let label = cleanLabel(nsText.substring(with: labelRange))
+            guard !label.isEmpty else { return nil }
+            return PatternCandidate(
+                fullRange: match.range,
+                fillRange: labelRange,
+                kind: FieldKind.inferred(from: label),
+                label: label,
+                context: context(around: match.range, in: nsText),
+                isLabelOnly: true
             )
         }
     }

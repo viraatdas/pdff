@@ -37,4 +37,16 @@ final class PDFPatternScannerTests: XCTestCase {
         XCTAssertEqual(fields.count, 1)
         XCTAssertEqual(fields[0].label, "Applicant phone")
     }
+
+    func testDetectsLabelOnlyOpenings() {
+        let fields = PDFPatternScanner.scan("Name:\nDate of Birth:\nAddress:\n")
+
+        XCTAssertEqual(fields.count, 3)
+        guard fields.count == 3 else { return }
+        XCTAssertEqual(fields[0].label, "Name")
+        XCTAssertTrue(fields[0].isLabelOnly)
+        XCTAssertEqual(fields[1].label, "Date of Birth")
+        XCTAssertEqual(fields[1].kind, .date)
+        XCTAssertEqual(fields[2].label, "Address")
+    }
 }

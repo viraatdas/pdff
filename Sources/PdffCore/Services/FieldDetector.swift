@@ -69,7 +69,9 @@ public enum FieldDetector {
         return PDFPatternScanner.scan(text).compactMap { candidate in
             guard let selection = page.selection(for: candidate.fillRange) else { return nil }
             var bounds = normalized(selection.bounds(for: page))
-            bounds = fieldBounds(for: candidate.kind, rawBounds: bounds)
+            bounds = candidate.isLabelOnly
+                ? fieldBoundsToRightOfLabel(candidate.kind, labelBounds: bounds, page: page)
+                : fieldBounds(for: candidate.kind, rawBounds: bounds)
             guard bounds.width > 2, bounds.height > 2 else { return nil }
             guard !existing.contains(where: { $0.pageIndex == pageIndex && overlaps($0.bounds, bounds) }) else {
                 return nil
@@ -81,7 +83,7 @@ public enum FieldDetector {
                 kind: candidate.kind,
                 label: candidate.label,
                 source: .pattern,
-                confidence: candidate.kind == .checkbox ? 0.82 : 0.74,
+                confidence: candidate.isLabelOnly ? 0.58 : (candidate.kind == .checkbox ? 0.82 : 0.74),
                 context: candidate.context
             )
         }
@@ -103,6 +105,25 @@ public enum FieldDetector {
                 height: height
             )
         }
+    }
+
+    private static func fieldBoundsToRightOfLabel(_ kind: FieldKind, labelBounds: CGRect, page: PDFPage) -> CGRect {
+        let pageBounds = page.bounds(for: .cropBox)
+        let height = max(labelBounds.height + 6, 18)
+        let minimumWidth: CGFloat = kind == .signature ? 160 : 90
+        let preferredWidth: CGFloat = kind == .signature ? 220 : 180
+        let x = labelBounds.maxX + 8
+        let maxX = pageBounds.maxX - 36
+        let availableWidth = maxX - x
+        guard availableWidth >= minimumWidth else { return .zero }
+
+        let width = min(max(availableWidth, minimumWidth), preferredWidth)
+        return CGRect(
+            x: x,
+            y: labelBounds.midY - height / 2,
+            width: width,
+            height: kind == .signature ? max(height, 34) : height
+        )
     }
 
     private static func normalized(_ rect: CGRect) -> CGRect {

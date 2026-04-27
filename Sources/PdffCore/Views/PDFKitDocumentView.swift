@@ -283,10 +283,6 @@ public final class PannablePDFView: PDFView {
 
     override public func mouseUp(with event: NSEvent) {
         popClosedHandCursorIfNeeded()
-        if !didDrag {
-            super.mouseDown(with: event)
-            super.mouseUp(with: event)
-        }
         lastDragLocation = nil
         didDrag = false
     }
