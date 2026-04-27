@@ -47,10 +47,21 @@ public struct ContentView: View {
                     Label("Open", systemImage: "doc.badge.plus")
                 }
 
-                Button {
-                    workspace.presentExportPanel()
+                Menu {
+                    Button {
+                        workspace.presentOverwriteConfirmation()
+                    } label: {
+                        Label("Overwrite Original", systemImage: "arrow.down.doc")
+                    }
+                    .disabled(workspace.documentURL == nil)
+
+                    Button {
+                        workspace.presentExportPanel()
+                    } label: {
+                        Label("Save As New PDF...", systemImage: "square.and.arrow.down")
+                    }
                 } label: {
-                    Label("Export", systemImage: "square.and.arrow.down")
+                    Label("Save PDF", systemImage: "square.and.arrow.down")
                 }
                 .disabled(workspace.document == nil)
             }
@@ -112,6 +123,7 @@ private struct SidebarView: View {
                         .buttonStyle(.borderedProminent)
                     } else {
                         CurrentFieldEditor()
+                        ManualFieldsSection()
                         SignatureSection(showingSignatureSheet: $showingSignatureSheet)
                         FieldList()
                     }
@@ -119,6 +131,48 @@ private struct SidebarView: View {
                 .padding(16)
             }
         }
+    }
+}
+
+private struct ManualFieldsSection: View {
+    @EnvironmentObject private var workspace: DocumentWorkspace
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Add Field")
+                    .font(.headline)
+                Spacer()
+                if workspace.activeTool != .select {
+                    Button {
+                        workspace.setActiveTool(.select)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Cancel")
+                }
+            }
+
+            HStack(spacing: 8) {
+                toolButton(.text)
+                toolButton(.checkbox)
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func toolButton(_ tool: DocumentTool) -> some View {
+        Button {
+            workspace.toggleActiveTool(tool)
+        } label: {
+            Label(tool.displayName, systemImage: tool.systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .foregroundStyle(workspace.activeTool == tool ? Color.accentColor : Color.primary)
+        .help("Add \(tool.displayName.lowercased()) field")
     }
 }
 
@@ -439,6 +493,15 @@ private struct SignatureSection: View {
                         .buttonStyle(.borderless)
                     }
                     .padding(.vertical, 6)
+                    .padding(.horizontal, 6)
+                    .background(
+                        workspace.selectedSignatureID == placed.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        workspace.selectPlacedSignature(id: placed.id)
+                    }
                 }
             }
         }

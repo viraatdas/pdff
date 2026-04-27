@@ -1,0 +1,55 @@
+name: Deploy Website
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-website.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Website Build and Optional Vercel Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Build website
+        working-directory: web
+        run: npm run build
+
+      - name: Pull Vercel project
+        if: env.VERCEL_TOKEN != ''
+        working-directory: web
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build for Vercel
+        if: env.VERCEL_TOKEN != ''
+        working-directory: web
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
+        working-directory: web
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      - name: Vercel Git deployment status
+        if: env.VERCEL_TOKEN == ''
+        run: echo "VERCEL_TOKEN is not set; Vercel Git integration will deploy pushes to main."

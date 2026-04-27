@@ -187,10 +187,10 @@ private final class DrawingPadView: NSView {
         baseline.lineWidth = 1
         baseline.stroke()
 
-        NSColor.black.setStroke()
+        NSColor.black.withAlphaComponent(0.86).setStroke()
         for stroke in strokes where stroke.count > 1 {
             let path = NSBezierPath()
-            path.lineWidth = 1.45
+            path.lineWidth = 1.15
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
             path.move(to: stroke[0])
@@ -229,14 +229,14 @@ private enum SignatureRenderer {
         NSColor.clear.setFill()
         CGRect(origin: .zero, size: size).fill()
 
-        NSColor.black.setStroke()
+        NSColor.black.withAlphaComponent(0.88).setStroke()
         let scale = min(size.width / max(sourceBounds.width, 1), size.height / max(sourceBounds.height, 1)) * 0.86
         let xOffset = (size.width - sourceBounds.width * scale) / 2 - sourceBounds.minX * scale
         let yOffset = (size.height - sourceBounds.height * scale) / 2 - sourceBounds.minY * scale
 
         for stroke in strokes where stroke.count > 1 {
             let path = NSBezierPath()
-            path.lineWidth = min(max(1.15 * sqrt(scale), 1.15), 2.2)
+            path.lineWidth = min(max(0.75 * sqrt(scale), 0.85), 1.55)
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
             path.move(to: transform(stroke[0], scale: scale, xOffset: xOffset, yOffset: yOffset))

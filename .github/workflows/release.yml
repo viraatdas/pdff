@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to package, for example 0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package macOS App
+    runs-on: macos-15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app bundle
+        env:
+          PDFF_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          PDFF_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          VERSION="${PDFF_VERSION#v}"
+          PDFF_VERSION="$VERSION" Scripts/build_app_bundle.sh
+
+      - name: Create release archives
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          ditto -c -k --keepParent .build/Pdff.app ".build/pdff-macos-$VERSION.zip"
+          cp ".build/pdff-macos-$VERSION.zip" .build/pdff-macos.zip
+          shasum -a 256 .build/pdff-macos.zip ".build/pdff-macos-$VERSION.zip" > .build/checksums.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          TAG="v$VERSION"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" .build/pdff-macos.zip ".build/pdff-macos-$VERSION.zip" .build/checksums.txt --clobber
+          else
+            gh release create "$TAG" .build/pdff-macos.zip ".build/pdff-macos-$VERSION.zip" .build/checksums.txt --generate-notes
+          fi

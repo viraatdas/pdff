@@ -10,12 +10,14 @@ public final class DocumentWorkspace: ObservableObject {
     @Published public var documentURL: URL?
     @Published public var fields: [DetectedField] = []
     @Published public var selectedFieldID: UUID?
+    @Published public var selectedSignatureID: UUID?
     @Published public var placedSignatures: [PlacedSignature] = []
     @Published public var alert: WorkspaceAlert?
     @Published public var isAILabeling = false
     @Published public var aiProvider: AIProviderChoice = .openAI
     @Published public var aiAPIKey = ""
     @Published public var visiblePageIndex = 0
+    @Published public var activeTool: DocumentTool = .select
 
     public let memoryStore: MemoryStore
     public let signatureStore: SignatureStore
@@ -67,7 +69,9 @@ public final class DocumentWorkspace: ObservableObject {
         documentURL = url
         fields = FieldDetector.detect(in: loaded)
         placedSignatures = []
+        selectedSignatureID = nil
         visiblePageIndex = 0
+        activeTool = .select
         selectedFieldID = fields.first?.id
 
         if fields.isEmpty {
@@ -103,9 +107,24 @@ public final class DocumentWorkspace: ObservableObject {
         panel.allowedContentTypes = [.pdf]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = defaultExportName()
-        panel.title = "Export Filled PDF"
+        panel.title = "Save Filled PDF As"
         if panel.runModal() == .OK, let url = panel.url {
             export(document: document, to: url)
+        }
+    }
+
+    public func presentOverwriteConfirmation() {
+        guard let document, let documentURL else { return }
+
+        let panel = NSAlert()
+        panel.messageText = "Overwrite Original PDF?"
+        panel.informativeText = documentURL.path
+        panel.alertStyle = .warning
+        panel.addButton(withTitle: "Overwrite")
+        panel.addButton(withTitle: "Cancel")
+
+        if panel.runModal() == .alertFirstButtonReturn {
+            export(document: document, to: documentURL)
         }
     }
 
@@ -113,13 +132,7 @@ public final class DocumentWorkspace: ObservableObject {
         fields.forEach { memoryStore.remember($0) }
 
         do {
-            try PDFFillWriter.exportFlattened(
-                document: document,
-                fields: fields,
-                signatures: placedSignatures,
-                signatureAssets: Dictionary(uniqueKeysWithValues: signatureStore.signatures.map { ($0.id, $0) }),
-                to: url
-            )
+            try writeFlattened(document: document, to: url)
             Haptics.complete()
             alert = WorkspaceAlert(title: "Export Complete", message: url.path)
         } catch {
@@ -129,6 +142,49 @@ public final class DocumentWorkspace: ObservableObject {
 
     public func selectField(id: UUID?) {
         selectedFieldID = id
+        selectedSignatureID = nil
+        activeTool = .select
+    }
+
+    public func selectPlacedSignature(id: UUID?) {
+        selectedSignatureID = id
+        selectedFieldID = nil
+        activeTool = .select
+    }
+
+    public func setActiveTool(_ tool: DocumentTool) {
+        activeTool = tool
+        if tool != .select {
+            selectedFieldID = nil
+            selectedSignatureID = nil
+        }
+    }
+
+    public func toggleActiveTool(_ tool: DocumentTool) {
+        setActiveTool(activeTool == tool ? .select : tool)
+    }
+
+    public func addManualField(tool: DocumentTool, pageIndex: Int, center: CGPoint) {
+        guard let kind = tool.fieldKind else { return }
+        let bounds = manualFieldBounds(kind: kind, pageIndex: pageIndex, center: center)
+        var field = DetectedField(
+            pageIndex: pageIndex,
+            bounds: bounds,
+            kind: kind,
+            label: kind == .checkbox ? "Checkbox" : "Text",
+            source: .user,
+            confidence: 1,
+            boolValue: kind == .checkbox,
+            context: "Manually added"
+        )
+
+        field.bounds = clamped(field.bounds, pageIndex: pageIndex)
+        fields.append(field)
+        fields = sortedFields(fields)
+        selectedFieldID = field.id
+        selectedSignatureID = nil
+        activeTool = .select
+        Haptics.step()
     }
 
     public func updateCurrentValue(_ value: String) {
@@ -145,6 +201,16 @@ public final class DocumentWorkspace: ObservableObject {
         updated.boolValue = value
         fields[currentIndex] = updated
         applyWidgetValue(updated)
+    }
+
+    public func toggleCheckbox(id: UUID) {
+        guard let index = fields.firstIndex(where: { $0.id == id && $0.kind == .checkbox }) else { return }
+        fields[index].boolValue.toggle()
+        applyWidgetValue(fields[index])
+        selectedFieldID = id
+        selectedSignatureID = nil
+        activeTool = .select
+        Haptics.step()
     }
 
     public func updateCurrentChoice(_ value: String) {
@@ -234,7 +300,9 @@ public final class DocumentWorkspace: ObservableObject {
             )
         }
 
-        placedSignatures.append(PlacedSignature(assetID: asset.id, pageIndex: pageIndex, bounds: clamped(bounds, pageIndex: pageIndex)))
+        let placed = PlacedSignature(assetID: asset.id, pageIndex: pageIndex, bounds: clamped(bounds, pageIndex: pageIndex))
+        placedSignatures.append(placed)
+        selectedSignatureID = placed.id
         if let currentIndex, fields[currentIndex].kind == .signature {
             var updated = fields[currentIndex]
             updated.value = asset.id.uuidString
@@ -270,6 +338,9 @@ public final class DocumentWorkspace: ObservableObject {
 
     public func removePlacedSignature(id: UUID) {
         placedSignatures.removeAll { $0.id == id }
+        if selectedSignatureID == id {
+            selectedSignatureID = nil
+        }
     }
 
     public func movePlacedSignature(id: UUID, dx: CGFloat, dy: CGFloat) {
@@ -298,6 +369,11 @@ public final class DocumentWorkspace: ObservableObject {
         Haptics.step()
     }
 
+    public func setPlacedSignatureBounds(id: UUID, bounds: CGRect) {
+        guard let index = placedSignatures.firstIndex(where: { $0.id == id }) else { return }
+        placedSignatures[index].bounds = clamped(bounds, pageIndex: placedSignatures[index].pageIndex)
+    }
+
     public func resetDocumentState() {
         fields = fields.map { field in
             var reset = field
@@ -306,12 +382,47 @@ public final class DocumentWorkspace: ObservableObject {
             return reset
         }
         placedSignatures = []
+        selectedSignatureID = nil
         selectedFieldID = fields.first?.id
+        activeTool = .select
     }
 
     private func defaultExportName() -> String {
         let base = documentURL?.deletingPathExtension().lastPathComponent ?? "filled"
         return "\(base)-filled.pdf"
+    }
+
+    private func writeFlattened(document: PDFDocument, to url: URL) throws {
+        let signatureAssets = Dictionary(uniqueKeysWithValues: signatureStore.signatures.map { ($0.id, $0) })
+        let target = url.standardizedFileURL
+        let original = documentURL?.standardizedFileURL
+
+        if target == original {
+            let temporaryURL = url
+                .deletingLastPathComponent()
+                .appendingPathComponent(".\(url.deletingPathExtension().lastPathComponent)-pdff-\(UUID().uuidString).pdf")
+            do {
+                try PDFFillWriter.exportFlattened(
+                    document: document,
+                    fields: fields,
+                    signatures: placedSignatures,
+                    signatureAssets: signatureAssets,
+                    to: temporaryURL
+                )
+                _ = try FileManager.default.replaceItemAt(url, withItemAt: temporaryURL)
+            } catch {
+                try? FileManager.default.removeItem(at: temporaryURL)
+                throw error
+            }
+        } else {
+            try PDFFillWriter.exportFlattened(
+                document: document,
+                fields: fields,
+                signatures: placedSignatures,
+                signatureAssets: signatureAssets,
+                to: url
+            )
+        }
     }
 
     nonisolated static func fileURL(from item: NSSecureCoding?) -> URL? {
@@ -368,6 +479,30 @@ public final class DocumentWorkspace: ObservableObject {
         let x = min(max(bounds.minX, pageBounds.minX), pageBounds.maxX - width)
         let y = min(max(bounds.minY, pageBounds.minY), pageBounds.maxY - height)
         return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func manualFieldBounds(kind: FieldKind, pageIndex: Int, center: CGPoint) -> CGRect {
+        let pageBounds = document?.page(at: pageIndex)?.bounds(for: .mediaBox) ?? CGRect(x: 0, y: 0, width: 612, height: 792)
+        let size: CGSize
+        switch kind {
+        case .checkbox:
+            let side = min(max(pageBounds.width * 0.026, 13), 19)
+            size = CGSize(width: side, height: side)
+        case .signature:
+            size = CGSize(width: min(max(pageBounds.width * 0.32, 160), 240), height: min(max(pageBounds.height * 0.05, 36), 52))
+        case .text, .date, .choice:
+            size = CGSize(width: min(max(pageBounds.width * 0.28, 130), 220), height: min(max(pageBounds.height * 0.028, 18), 26))
+        }
+        return CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+    }
+
+    private func sortedFields(_ fields: [DetectedField]) -> [DetectedField] {
+        fields.sorted {
+            if $0.pageIndex != $1.pageIndex { return $0.pageIndex < $1.pageIndex }
+            let dy = abs($0.bounds.midY - $1.bounds.midY)
+            if dy > 8 { return $0.bounds.midY > $1.bounds.midY }
+            return $0.bounds.minX < $1.bounds.minX
+        }
     }
 }
 

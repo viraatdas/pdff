@@ -35,6 +35,38 @@ public enum FieldSource: String, Codable, Hashable, Sendable {
     }
 }
 
+public enum DocumentTool: String, Codable, CaseIterable, Identifiable, Sendable {
+    case select
+    case text
+    case checkbox
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .select: "Select"
+        case .text: "Text"
+        case .checkbox: "Checkbox"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .select: "cursorarrow"
+        case .text: "text.cursor"
+        case .checkbox: "square"
+        }
+    }
+
+    public var fieldKind: FieldKind? {
+        switch self {
+        case .select: nil
+        case .text: .text
+        case .checkbox: .checkbox
+        }
+    }
+}
+
 public struct DetectedField: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: UUID
     public var pageIndex: Int

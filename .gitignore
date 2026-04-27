@@ -2,6 +2,8 @@
 .swiftpm/
 DerivedData/
 Assets/AppIcon.iconset/
+web/dist/
+web/node_modules/
 *.xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.dSYM/

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>pdff</title>
+    <meta
+      name="description"
+      content="A native macOS PDF viewer, filler, and signature tool."
+    />
+    <meta property="og:title" content="pdff" />
+    <meta
+      property="og:description"
+      content="A native macOS PDF viewer, filler, and signature tool."
+    />
+    <meta property="og:image" content="/app-icon.png" />
+    <link rel="icon" href="/app-icon.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="title">
+        <div class="hero-copy">
+          <img class="app-icon" src="/app-icon.png" alt="" width="112" height="112" />
+          <p class="eyebrow">Native Mac PDF fill and sign</p>
+          <h1 id="title">pdff</h1>
+          <p class="lede">
+            Open a PDF, step through detected fields, type answers, place signatures,
+            and save a flattened copy without changing document reflow.
+          </p>
+          <div class="actions">
+            <a
+              class="primary-action"
+              href="https://github.com/viraatdas/pdff/releases/latest/download/pdff-macos.zip"
+            >
+              Download for macOS
+            </a>
+            <a class="secondary-action" href="https://github.com/viraatdas/pdff">
+              GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="product-panel" aria-hidden="true">
+          <div class="window-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="viewer">
+            <aside>
+              <div class="small-line"></div>
+              <div class="field active"></div>
+              <div class="field"></div>
+              <div class="field checkbox"></div>
+            </aside>
+            <div class="page">
+              <div class="line short"></div>
+              <div class="fillable selected"></div>
+              <div class="line"></div>
+              <div class="fillable"></div>
+              <div class="check-row">
+                <span class="box">×</span>
+                <span></span>
+              </div>
+              <div class="signature">Viraat</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="details" aria-label="Highlights">
+        <div>
+          <h2>Guided Queue</h2>
+          <p>Detected fields stay ordered by page, with one focused target at a time.</p>
+        </div>
+        <div>
+          <h2>Manual Fixes</h2>
+          <p>Add text boxes or checkbox squares when a PDF has odd layout.</p>
+        </div>
+        <div>
+          <h2>Native Signatures</h2>
+          <p>Draw or type once, then move and resize signatures directly on the PDF.</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
