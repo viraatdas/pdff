@@ -1,30 +1,44 @@
 import PDFKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct ContentView: View {
     @EnvironmentObject private var workspace: DocumentWorkspace
     @State private var showingSignatureSheet = false
+    @State private var isDroppingPDF = false
 
     public init() {}
 
     public var body: some View {
-        HStack(spacing: 0) {
-            SidebarView(showingSignatureSheet: $showingSignatureSheet)
-                .frame(width: 340)
-                .background(.background)
+        ZStack {
+            HStack(spacing: 0) {
+                SidebarView(showingSignatureSheet: $showingSignatureSheet)
+                    .frame(width: 340)
+                    .background(.background)
 
-            Divider()
+                Divider()
 
-            ZStack {
-                if workspace.document == nil {
-                    EmptyDocumentView()
-                } else {
-                    PDFKitDocumentView(workspace: workspace)
-                    DocuSignNextButton()
+                ZStack {
+                    if workspace.document == nil {
+                        EmptyDocumentView()
+                    } else {
+                        PDFKitDocumentView(workspace: workspace)
+                        DocuSignNextButton()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if isDroppingPDF {
+                DropOverlayView()
+                    .allowsHitTesting(false)
+            }
         }
+        .onDrop(
+            of: [UTType.fileURL.identifier],
+            isTargeted: $isDroppingPDF,
+            perform: workspace.loadDroppedPDF(from:)
+        )
         .toolbar {
             ToolbarItemGroup {
                 Button {
@@ -54,6 +68,24 @@ public struct ContentView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+}
+
+private struct DropOverlayView: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [10, 7]))
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                VStack(spacing: 10) {
+                    Image(systemName: "doc.badge.plus")
+                        .font(.system(size: 42, weight: .semibold))
+                    Text("Drop PDF to Open")
+                        .font(.title3.weight(.semibold))
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+            .padding(24)
     }
 }
 

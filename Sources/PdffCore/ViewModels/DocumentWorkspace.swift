@@ -81,6 +81,22 @@ public final class DocumentWorkspace: ObservableObject {
         }
     }
 
+    public func loadDroppedPDF(from providers: [NSItemProvider]) -> Bool {
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] item, _ in
+                guard let url = Self.fileURL(from: item), url.pathExtension.lowercased() == "pdf" else {
+                    return
+                }
+                Task { @MainActor in
+                    self?.loadPDF(url: url)
+                }
+            }
+            return true
+        }
+
+        return false
+    }
+
     public func presentExportPanel() {
         guard let document else { return }
         let panel = NSSavePanel()
@@ -296,6 +312,19 @@ public final class DocumentWorkspace: ObservableObject {
     private func defaultExportName() -> String {
         let base = documentURL?.deletingPathExtension().lastPathComponent ?? "filled"
         return "\(base)-filled.pdf"
+    }
+
+    nonisolated static func fileURL(from item: NSSecureCoding?) -> URL? {
+        if let url = item as? URL {
+            return url
+        }
+        if let data = item as? Data {
+            return URL(dataRepresentation: data, relativeTo: nil)
+        }
+        if let string = item as? String {
+            return URL(string: string)
+        }
+        return nil
     }
 
     private func applyWidgetValue(_ field: DetectedField) {

@@ -27,9 +27,7 @@ public struct PDFKitDocumentView: NSViewRepresentable {
 
     public func updateNSView(_ nsView: PDFCanvasView, context: Context) {
         if context.coordinator.document !== workspace.document {
-            nsView.pdfView.document = workspace.document
-            nsView.pdfView.autoScales = true
-            nsView.goToTopOfDocument()
+            nsView.loadDocument(workspace.document)
             context.coordinator.document = workspace.document
             context.coordinator.focusedFieldID = workspace.selectedFieldID
         }
@@ -95,6 +93,7 @@ public final class PDFCanvasView: NSView {
     public var onPageChanged: ((Int) -> Void)?
     private weak var observedClipView: NSClipView?
     private var lastPublishedPageIndex: Int?
+    private var needsInitialTopScroll = false
 
     override public init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -135,6 +134,7 @@ public final class PDFCanvasView: NSView {
         pdfView.frame = bounds
         overlayView.frame = bounds
         observeScrollBoundsIfNeeded()
+        scrollToTopIfNeeded()
         overlayView.needsDisplay = true
     }
 
@@ -152,6 +152,8 @@ public final class PDFCanvasView: NSView {
         NotificationCenter.default.removeObserver(self)
         onPageChanged = nil
         observedClipView = nil
+        needsInitialTopScroll = false
+        lastPublishedPageIndex = nil
         overlayView.onSelectField = nil
         overlayView.pdfView = nil
         overlayView.fields = []
@@ -160,15 +162,60 @@ public final class PDFCanvasView: NSView {
         pdfView.document = nil
     }
 
+    public func loadDocument(_ document: PDFDocument?) {
+        pdfView.document = document
+        pdfView.autoScales = true
+        observedClipView = nil
+        lastPublishedPageIndex = nil
+        needsInitialTopScroll = document != nil
+        observeScrollBoundsIfNeeded()
+        scheduleInitialTopScroll()
+    }
+
     public func goToTopOfDocument() {
         guard let page = pdfView.document?.page(at: 0) else { return }
+        pdfView.layoutDocumentView()
+        observeScrollBoundsIfNeeded()
+
         let pageBounds = page.bounds(for: pdfView.displayBox)
-        let destination = PDFDestination(
-            page: page,
-            at: CGPoint(x: pageBounds.minX, y: pageBounds.maxY)
+        pdfView.go(
+            to: CGRect(x: pageBounds.minX, y: pageBounds.maxY - 1, width: 1, height: 1),
+            on: page
         )
-        pdfView.go(to: destination)
+
+        if
+            let documentView = pdfView.documentView,
+            let clipView = documentView.enclosingScrollView?.contentView
+        {
+            let pageViewRect = pdfView.convert(pageBounds, from: page)
+            let pageDocumentRect = documentView.convert(pageViewRect, from: pdfView)
+            let targetY = documentView.isFlipped
+                ? pageDocumentRect.minY
+                : max(documentView.bounds.minY, pageDocumentRect.maxY - clipView.bounds.height)
+            let targetX = min(
+                max(pageDocumentRect.minX, documentView.bounds.minX),
+                max(documentView.bounds.maxX - clipView.bounds.width, documentView.bounds.minX)
+            )
+            clipView.scroll(to: CGPoint(x: targetX, y: targetY))
+            documentView.enclosingScrollView?.reflectScrolledClipView(clipView)
+        }
+
+        needsInitialTopScroll = false
         overlayView.needsDisplay = true
+    }
+
+    private func scrollToTopIfNeeded() {
+        guard needsInitialTopScroll else { return }
+        scheduleInitialTopScroll()
+    }
+
+    private func scheduleInitialTopScroll() {
+        DispatchQueue.main.async { [weak self] in
+            self?.goToTopOfDocument()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.goToTopOfDocument()
+        }
     }
 
     private func observeScrollBoundsIfNeeded() {
