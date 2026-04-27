@@ -215,6 +215,32 @@ public final class DocumentWorkspace: ObservableObject {
         placedSignatures.removeAll { $0.id == id }
     }
 
+    public func movePlacedSignature(id: UUID, dx: CGFloat, dy: CGFloat) {
+        guard let index = placedSignatures.firstIndex(where: { $0.id == id }) else { return }
+        placedSignatures[index].bounds = clamped(
+            placedSignatures[index].bounds.offsetBy(dx: dx, dy: dy),
+            pageIndex: placedSignatures[index].pageIndex
+        )
+        Haptics.step()
+    }
+
+    public func scalePlacedSignature(id: UUID, factor: CGFloat) {
+        guard let index = placedSignatures.firstIndex(where: { $0.id == id }) else { return }
+        let oldBounds = placedSignatures[index].bounds
+        let newSize = CGSize(
+            width: min(max(oldBounds.width * factor, 48), 360),
+            height: min(max(oldBounds.height * factor, 18), 160)
+        )
+        let newBounds = CGRect(
+            x: oldBounds.midX - newSize.width / 2,
+            y: oldBounds.midY - newSize.height / 2,
+            width: newSize.width,
+            height: newSize.height
+        )
+        placedSignatures[index].bounds = clamped(newBounds, pageIndex: placedSignatures[index].pageIndex)
+        Haptics.step()
+    }
+
     public func resetDocumentState() {
         fields = fields.map { field in
             var reset = field
@@ -257,6 +283,18 @@ public final class DocumentWorkspace: ObservableObject {
         return page.annotations.first { annotation in
             annotation.type == PDFAnnotationSubtype.widget.rawValue && annotation.bounds.intersects(field.bounds)
         }
+    }
+
+    private func clamped(_ bounds: CGRect, pageIndex: Int) -> CGRect {
+        guard let pageBounds = document?.page(at: pageIndex)?.bounds(for: .mediaBox) else {
+            return bounds
+        }
+
+        let width = min(bounds.width, pageBounds.width)
+        let height = min(bounds.height, pageBounds.height)
+        let x = min(max(bounds.minX, pageBounds.minX), pageBounds.maxX - width)
+        let y = min(max(bounds.minY, pageBounds.minY), pageBounds.maxY - height)
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 }
 

@@ -269,9 +269,90 @@ private struct SignatureSection: View {
                     }
                 }
             }
+
+            if !workspace.placedSignatures.isEmpty {
+                Divider()
+                Text("Placed")
+                    .font(.subheadline.weight(.medium))
+
+                ForEach(workspace.placedSignatures) { placed in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(signatureName(for: placed))
+                                .lineLimit(1)
+                            Spacer()
+                            Text("Page \(placed.pageIndex + 1)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack(spacing: 6) {
+                            Button {
+                                workspace.movePlacedSignature(id: placed.id, dx: -8, dy: 0)
+                            } label: {
+                                Image(systemName: "arrow.left")
+                            }
+                            .help("Move left")
+
+                            Button {
+                                workspace.movePlacedSignature(id: placed.id, dx: 8, dy: 0)
+                            } label: {
+                                Image(systemName: "arrow.right")
+                            }
+                            .help("Move right")
+
+                            Button {
+                                workspace.movePlacedSignature(id: placed.id, dx: 0, dy: 8)
+                            } label: {
+                                Image(systemName: "arrow.up")
+                            }
+                            .help("Move up")
+
+                            Button {
+                                workspace.movePlacedSignature(id: placed.id, dx: 0, dy: -8)
+                            } label: {
+                                Image(systemName: "arrow.down")
+                            }
+                            .help("Move down")
+
+                            Divider()
+                                .frame(height: 20)
+
+                            Button {
+                                workspace.scalePlacedSignature(id: placed.id, factor: 0.9)
+                            } label: {
+                                Image(systemName: "minus.magnifyingglass")
+                            }
+                            .help("Make smaller")
+
+                            Button {
+                                workspace.scalePlacedSignature(id: placed.id, factor: 1.1)
+                            } label: {
+                                Image(systemName: "plus.magnifyingglass")
+                            }
+                            .help("Make larger")
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                workspace.removePlacedSignature(id: placed.id)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .help("Remove")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func signatureName(for placed: PlacedSignature) -> String {
+        workspace.signatureStore.signature(id: placed.assetID)?.name ?? "Signature"
     }
 }
 
