@@ -27,6 +27,51 @@ final class DocumentWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.activeTool, .select)
     }
 
+    @MainActor
+    func testChangingWidgetSignatureToTextDetachesAndResizesField() throws {
+        let workspace = DocumentWorkspace()
+        workspace.document = try makeBlankPDF()
+        let field = DetectedField(
+            pageIndex: 0,
+            bounds: CGRect(x: 80, y: 120, width: 220, height: 56),
+            kind: .signature,
+            label: "Signature",
+            source: .widget,
+            confidence: 1,
+            value: UUID().uuidString,
+            widgetFieldName: "signature"
+        )
+        workspace.fields = [field]
+        workspace.selectedFieldID = field.id
+
+        workspace.updateCurrentFieldKind(.text)
+
+        XCTAssertEqual(workspace.fields[0].kind, .text)
+        XCTAssertEqual(workspace.fields[0].source, .user)
+        XCTAssertNil(workspace.fields[0].widgetFieldName)
+        XCTAssertEqual(workspace.fields[0].value, "")
+        XCTAssertLessThan(workspace.fields[0].bounds.height, field.bounds.height)
+    }
+
+    @MainActor
+    func testCheckboxBoundsStaySquareWhenEdited() throws {
+        let workspace = DocumentWorkspace()
+        workspace.document = try makeBlankPDF()
+        let field = DetectedField(
+            pageIndex: 0,
+            bounds: CGRect(x: 80, y: 120, width: 16, height: 16),
+            kind: .checkbox,
+            label: "Checkbox",
+            source: .pattern,
+            confidence: 1
+        )
+        workspace.fields = [field]
+
+        workspace.setFieldBounds(id: field.id, bounds: CGRect(x: 90, y: 130, width: 36, height: 12))
+
+        XCTAssertEqual(workspace.fields[0].bounds.width, workspace.fields[0].bounds.height)
+    }
+
     private func makeBlankPDF() throws -> PDFDocument {
         let data = NSMutableData()
         guard let consumer = CGDataConsumer(data: data as CFMutableData) else {

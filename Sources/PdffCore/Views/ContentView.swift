@@ -221,6 +221,8 @@ private struct CurrentFieldEditor: View {
                     .font(.headline)
                     .lineLimit(2)
 
+                FieldEditControls(field: field)
+
                 editor(for: field)
 
                 let suggestions = workspace.memoryStore.suggestions(for: field.label)
@@ -268,6 +270,9 @@ private struct CurrentFieldEditor: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .onAppear(perform: focusIfEditable)
         .onChange(of: workspace.selectedFieldID) { _, _ in
+            focusIfEditable()
+        }
+        .onChange(of: workspace.currentField?.kind) { _, _ in
             focusIfEditable()
         }
     }
@@ -339,6 +344,93 @@ private struct CurrentFieldEditor: View {
         }
         DispatchQueue.main.async {
             fieldInputFocused = shouldFocus
+        }
+    }
+}
+
+private struct FieldEditControls: View {
+    @EnvironmentObject private var workspace: DocumentWorkspace
+    var field: DetectedField
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Type", selection: Binding(
+                get: { workspace.currentField?.kind ?? field.kind },
+                set: { workspace.updateCurrentFieldKind($0) }
+            )) {
+                ForEach(FieldKind.allCases, id: \.self) { kind in
+                    Label(kind.displayName, systemImage: iconName(for: kind))
+                        .tag(kind)
+                }
+            }
+            .pickerStyle(.menu)
+
+            HStack(spacing: 6) {
+                Button {
+                    workspace.moveCurrentField(dx: -4, dy: 0)
+                } label: {
+                    Image(systemName: "arrow.left")
+                }
+                .help("Move field left")
+
+                Button {
+                    workspace.moveCurrentField(dx: 4, dy: 0)
+                } label: {
+                    Image(systemName: "arrow.right")
+                }
+                .help("Move field right")
+
+                Button {
+                    workspace.moveCurrentField(dx: 0, dy: 4)
+                } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .help("Move field up")
+
+                Button {
+                    workspace.moveCurrentField(dx: 0, dy: -4)
+                } label: {
+                    Image(systemName: "arrow.down")
+                }
+                .help("Move field down")
+
+                Divider()
+                    .frame(height: 20)
+
+                Button {
+                    workspace.scaleCurrentField(factor: 0.9)
+                } label: {
+                    Image(systemName: "minus.magnifyingglass")
+                }
+                .help("Make field smaller")
+
+                Button {
+                    workspace.scaleCurrentField(factor: 1.1)
+                } label: {
+                    Image(systemName: "plus.magnifyingglass")
+                }
+                .help("Make field larger")
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    workspace.removeCurrentField()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Remove field")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private func iconName(for kind: FieldKind) -> String {
+        switch kind {
+        case .text: "text.cursor"
+        case .date: "calendar"
+        case .checkbox: "square"
+        case .choice: "list.bullet.rectangle"
+        case .signature: "signature"
         }
     }
 }

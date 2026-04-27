@@ -119,15 +119,29 @@ public enum PDFFillWriter {
 
     private static func drawCheckbox(_ field: DetectedField) {
         guard field.boolValue else { return }
-        let bounds = field.bounds.insetBy(dx: 1.5, dy: 1.5)
+        let square = centeredSquare(in: field.bounds)
+        let inset = max(1.0, square.width * 0.12)
+        let bounds = square.insetBy(dx: inset, dy: inset)
         let path = NSBezierPath()
         path.move(to: CGPoint(x: bounds.minX, y: bounds.minY))
         path.line(to: CGPoint(x: bounds.maxX, y: bounds.maxY))
         path.move(to: CGPoint(x: bounds.minX, y: bounds.maxY))
         path.line(to: CGPoint(x: bounds.maxX, y: bounds.minY))
-        path.lineWidth = 1.8
+        path.lineWidth = max(1.2, square.width * 0.095)
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
         NSColor.labelColor.setStroke()
         path.stroke()
+    }
+
+    private static func centeredSquare(in rect: CGRect) -> CGRect {
+        let side = min(rect.width, rect.height)
+        return CGRect(
+            x: rect.midX - side / 2,
+            y: rect.midY - side / 2,
+            width: side,
+            height: side
+        )
     }
 
     private static func drawSignatures(

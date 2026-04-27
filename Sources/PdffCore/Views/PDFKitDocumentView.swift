@@ -50,6 +50,9 @@ public struct PDFKitDocumentView: NSViewRepresentable {
         nsView.overlayView.onAddManualField = { [weak workspace] tool, pageIndex, point in
             workspace?.addManualField(tool: tool, pageIndex: pageIndex, center: point)
         }
+        nsView.overlayView.onSetFieldBounds = { [weak workspace] id, bounds in
+            workspace?.setFieldBounds(id: id, bounds: bounds)
+        }
         nsView.overlayView.onSelectSignature = { [weak workspace] id in
             workspace?.selectPlacedSignature(id: id)
         }
@@ -179,6 +182,7 @@ public final class PDFCanvasView: NSView {
         overlayView.onSelectField = nil
         overlayView.onToggleCheckbox = nil
         overlayView.onAddManualField = nil
+        overlayView.onSetFieldBounds = nil
         overlayView.onSelectSignature = nil
         overlayView.onSetSignatureBounds = nil
         overlayView.pdfView = nil
@@ -356,11 +360,13 @@ public final class FieldOverlayView: NSView {
     var onSelectField: ((UUID) -> Void)?
     var onToggleCheckbox: ((UUID) -> Void)?
     var onAddManualField: ((DocumentTool, Int, CGPoint) -> Void)?
+    var onSetFieldBounds: ((UUID, CGRect) -> Void)?
     var onSelectSignature: ((UUID) -> Void)?
     var onSetSignatureBounds: ((UUID, CGRect) -> Void)?
     private var signatureImageCache: [UUID: NSImage] = [:]
     private var signatureImageCacheKeys = Set<UUID>()
     private var signatureDrag: SignatureDrag?
+    private var fieldDrag: FieldDrag?
 
     override public var isOpaque: Bool { false }
 
@@ -431,27 +437,77 @@ public final class FieldOverlayView: NSView {
             return
         }
 
-        guard let field = field(at: point) else {
+        guard let fieldHit = field(at: point) else {
             super.mouseDown(with: event)
             return
         }
 
-        if field.kind == .checkbox {
-            onToggleCheckbox?(field.id)
-        } else {
-            onSelectField?(field.id)
+        if let page = pdfView?.document?.page(at: fieldHit.field.pageIndex) {
+            let pagePoint = pdfView?.convert(point, to: page) ?? .zero
+            fieldDrag = FieldDrag(
+                id: fieldHit.field.id,
+                pageIndex: fieldHit.field.pageIndex,
+                startBounds: fieldHit.field.bounds,
+                startPoint: pagePoint,
+                kind: fieldHit.field.kind,
+                mode: fieldHit.isResizeHandle ? .resize : .move,
+                didMove: false
+            )
         }
+        onSelectField?(fieldHit.field.id)
     }
 
     override public func mouseDragged(with event: NSEvent) {
+        if handleSignatureDrag(with: event) {
+            return
+        }
+        if handleFieldDrag(with: event) {
+            return
+        }
+
+        super.mouseDragged(with: event)
+    }
+
+    override public func mouseUp(with event: NSEvent) {
+        if let fieldDrag {
+            if !fieldDrag.didMove, fieldDrag.kind == .checkbox, fieldDrag.mode == .move {
+                onToggleCheckbox?(fieldDrag.id)
+            }
+            self.fieldDrag = nil
+            return
+        }
+
+        if signatureDrag != nil {
+            signatureDrag = nil
+            return
+        }
+
+        super.mouseUp(with: event)
+    }
+
+    override public func hitTest(_ point: NSPoint) -> NSView? {
+        if activeTool != .select, pageLocation(at: point) != nil {
+            return self
+        }
+        if signature(at: point) != nil {
+            return self
+        }
+        return field(at: point) == nil ? nil : self
+    }
+
+    override public func resetCursorRects() {
+        super.resetCursorRects()
+        if activeTool != .select {
+            addCursorRect(bounds, cursor: .crosshair)
+        }
+    }
+
+    private func handleSignatureDrag(with event: NSEvent) -> Bool {
         guard
             let signatureDrag,
             let pdfView,
             let page = pdfView.document?.page(at: signatureDrag.pageIndex)
-        else {
-            super.mouseDragged(with: event)
-            return
-        }
+        else { return false }
 
         let point = convert(event.locationInWindow, from: nil)
         let pagePoint = pdfView.convert(point, to: page)
@@ -476,36 +532,52 @@ public final class FieldOverlayView: NSView {
 
         onSetSignatureBounds?(signatureDrag.id, updatedBounds)
         needsDisplay = true
+        return true
     }
 
-    override public func mouseUp(with event: NSEvent) {
-        signatureDrag = nil
-        super.mouseUp(with: event)
-    }
+    private func handleFieldDrag(with event: NSEvent) -> Bool {
+        guard
+            var fieldDrag,
+            let pdfView,
+            let page = pdfView.document?.page(at: fieldDrag.pageIndex)
+        else { return false }
 
-    override public func hitTest(_ point: NSPoint) -> NSView? {
-        if activeTool != .select, pageLocation(at: point) != nil {
-            return self
+        let point = convert(event.locationInWindow, from: nil)
+        let pagePoint = pdfView.convert(point, to: page)
+        let dx = pagePoint.x - fieldDrag.startPoint.x
+        let dy = pagePoint.y - fieldDrag.startPoint.y
+
+        if abs(dx) > 0.5 || abs(dy) > 0.5 {
+            fieldDrag.didMove = true
+            self.fieldDrag = fieldDrag
         }
-        if signature(at: point) != nil {
-            return self
+
+        let updatedBounds: CGRect
+        switch fieldDrag.mode {
+        case .move:
+            updatedBounds = fieldDrag.startBounds.offsetBy(dx: dx, dy: dy)
+        case .resize:
+            updatedBounds = resizedFieldBounds(from: fieldDrag.startBounds, kind: fieldDrag.kind, dx: dx, dy: dy)
         }
-        return field(at: point) == nil ? nil : self
+
+        onSetFieldBounds?(fieldDrag.id, updatedBounds)
+        needsDisplay = true
+        return true
     }
 
-    override public func resetCursorRects() {
-        super.resetCursorRects()
-        if activeTool != .select {
-            addCursorRect(bounds, cursor: .crosshair)
-        }
-    }
-
-    private func field(at point: CGPoint) -> DetectedField? {
+    private func field(at point: CGPoint) -> FieldHit? {
         guard let pdfView else { return nil }
-        return fields.first { field in
-            guard let rect = rect(for: field, in: pdfView) else { return false }
-            return rect.insetBy(dx: -5, dy: -5).contains(point)
+        for field in fields.reversed() {
+            guard let rect = rect(for: field, in: pdfView) else { continue }
+            let handle = resizeHandleRect(for: rect)
+            if field.id == selectedFieldID, handle.insetBy(dx: -4, dy: -4).contains(point) {
+                return FieldHit(field: field, isResizeHandle: true)
+            }
+            if rect.insetBy(dx: -5, dy: -5).contains(point) {
+                return FieldHit(field: field, isResizeHandle: false)
+            }
         }
+        return nil
     }
 
     private func rect(for field: DetectedField, in pdfView: PDFView) -> CGRect? {
@@ -550,6 +622,11 @@ public final class FieldOverlayView: NSView {
         baseColor.withAlphaComponent(selected ? 0.95 : 0.42).setStroke()
         path.lineWidth = selected ? 2.0 : 1.0
         path.stroke()
+
+        if selected {
+            baseColor.setFill()
+            NSBezierPath(roundedRect: resizeHandleRect(for: rect), xRadius: 2, yRadius: 2).fill()
+        }
     }
 
     private func drawValue(for field: DetectedField, in rect: CGRect) {
@@ -588,13 +665,15 @@ public final class FieldOverlayView: NSView {
     }
 
     private func drawCheckbox(in rect: CGRect) {
-        let bounds = rect.insetBy(dx: max(2, rect.width * 0.18), dy: max(2, rect.height * 0.18))
+        let square = centeredSquare(in: rect)
+        let inset = max(1.2, square.width * 0.14)
+        let bounds = square.insetBy(dx: inset, dy: inset)
         let path = NSBezierPath()
         path.move(to: CGPoint(x: bounds.minX, y: bounds.minY))
         path.line(to: CGPoint(x: bounds.maxX, y: bounds.maxY))
         path.move(to: CGPoint(x: bounds.minX, y: bounds.maxY))
         path.line(to: CGPoint(x: bounds.maxX, y: bounds.minY))
-        path.lineWidth = 2
+        path.lineWidth = max(1.3, square.width * 0.1)
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
         NSColor.controlAccentColor.setStroke()
@@ -618,9 +697,40 @@ public final class FieldOverlayView: NSView {
     private func resizeHandleRect(for rect: CGRect) -> CGRect {
         CGRect(x: rect.maxX - 5, y: rect.maxY - 5, width: 10, height: 10)
     }
+
+    private func centeredSquare(in rect: CGRect) -> CGRect {
+        let side = min(rect.width, rect.height)
+        return CGRect(
+            x: rect.midX - side / 2,
+            y: rect.midY - side / 2,
+            width: side,
+            height: side
+        )
+    }
+
+    private func resizedFieldBounds(from bounds: CGRect, kind: FieldKind, dx: CGFloat, dy: CGFloat) -> CGRect {
+        let minimum: CGSize
+        switch kind {
+        case .checkbox:
+            minimum = CGSize(width: 10, height: 10)
+            let side = max(min(max(bounds.width + dx, bounds.height + dy), 48), minimum.width)
+            return CGRect(x: bounds.minX, y: bounds.minY, width: side, height: side)
+        case .signature:
+            minimum = CGSize(width: 72, height: 22)
+        case .text, .date, .choice:
+            minimum = CGSize(width: 42, height: 12)
+        }
+
+        return CGRect(
+            x: bounds.minX,
+            y: bounds.minY,
+            width: max(bounds.width + dx, minimum.width),
+            height: max(bounds.height + dy, minimum.height)
+        )
+    }
 }
 
-private enum SignatureDragMode {
+private enum OverlayDragMode: Equatable {
     case move
     case resize
 }
@@ -630,10 +740,25 @@ private struct SignatureDrag {
     var pageIndex: Int
     var startBounds: CGRect
     var startPoint: CGPoint
-    var mode: SignatureDragMode
+    var mode: OverlayDragMode
 }
 
 private struct SignatureHit {
     var signature: PlacedSignature
+    var isResizeHandle: Bool
+}
+
+private struct FieldDrag {
+    var id: UUID
+    var pageIndex: Int
+    var startBounds: CGRect
+    var startPoint: CGPoint
+    var kind: FieldKind
+    var mode: OverlayDragMode
+    var didMove: Bool
+}
+
+private struct FieldHit {
+    var field: DetectedField
     var isResizeHandle: Bool
 }
