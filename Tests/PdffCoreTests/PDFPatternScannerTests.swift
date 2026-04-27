@@ -18,13 +18,17 @@ final class PDFPatternScannerTests: XCTestCase {
     }
 
     func testDetectsCheckboxLabels() {
-        let fields = PDFPatternScanner.scan("☐ Married\n[ ] Single\n")
+        let fields = PDFPatternScanner.scan("☐ Married\n[ ] Single\n□ Citizen\n◻ Authorized\n")
 
-        XCTAssertEqual(fields.count, 2)
+        XCTAssertEqual(fields.count, 4)
         XCTAssertEqual(fields[0].kind, .checkbox)
         XCTAssertEqual(fields[0].label, "Married")
         XCTAssertEqual(fields[1].kind, .checkbox)
         XCTAssertEqual(fields[1].label, "Single")
+        XCTAssertEqual(fields[2].kind, .checkbox)
+        XCTAssertEqual(fields[2].label, "Citizen")
+        XCTAssertEqual(fields[3].kind, .checkbox)
+        XCTAssertEqual(fields[3].label, "Authorized")
     }
 
     func testStandaloneBlankUsesLinePrefixAsLabel() {

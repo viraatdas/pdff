@@ -50,7 +50,7 @@ public enum PDFPatternScanner {
     }
 
     private static func scanCheckboxes(in nsText: NSString, fullRange: NSRange) -> [PatternCandidate] {
-        let pattern = #"(?im)(\x{2610}|\[\s?\]|\(\s?\))\s*([A-Za-z][^\n]{1,56})"#
+        let pattern = #"(?im)(\x{2610}|\x{25A1}|\x{25A2}|\x{25FB}|\x{25FD}|\x{2751}|\[\s?\]|\(\s?\))\s*([A-Za-z][^\n]{1,56})"#
         return matches(pattern: pattern, in: nsText, range: fullRange).compactMap { match in
             guard match.numberOfRanges >= 3 else { return nil }
             let label = cleanLabel(nsText.substring(with: match.range(at: 2)))

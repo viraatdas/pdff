@@ -20,6 +20,7 @@ public struct ContentView: View {
                     EmptyDocumentView()
                 } else {
                     PDFKitDocumentView(workspace: workspace)
+                    DocuSignNextButton()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -165,6 +166,7 @@ private struct CurrentFieldEditor: View {
                     } label: {
                         Label("Next", systemImage: "chevron.right")
                     }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: [])
                 }
             } else {
@@ -226,6 +228,41 @@ private struct CurrentFieldEditor: View {
             ))
             .textFieldStyle(.roundedBorder)
         }
+    }
+}
+
+private struct DocuSignNextButton: View {
+    @EnvironmentObject private var workspace: DocumentWorkspace
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button {
+                    workspace.nextField()
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(nextTitle)
+                            .font(.headline)
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.title3)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(workspace.fields.isEmpty)
+                .padding(24)
+            }
+        }
+        .allowsHitTesting(!workspace.fields.isEmpty)
+    }
+
+    private var nextTitle: String {
+        guard let currentIndex = workspace.currentIndex else { return "Start" }
+        return currentIndex == workspace.fields.count - 1 ? "Finish" : "Next"
     }
 }
 

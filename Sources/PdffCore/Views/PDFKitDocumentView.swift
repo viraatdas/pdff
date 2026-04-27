@@ -39,6 +39,9 @@ public struct PDFKitDocumentView: NSViewRepresentable {
         nsView.overlayView.onSelectField = { id in
             workspace.selectField(id: id)
         }
+        nsView.onPageChanged = { index in
+            workspace.updateVisiblePageIndex(index)
+        }
         nsView.overlayView.needsDisplay = true
         nsView.pdfView.setNeedsDisplay(nsView.pdfView.bounds)
 
@@ -54,16 +57,20 @@ public struct PDFKitDocumentView: NSViewRepresentable {
             let page = workspace.document?.page(at: selected.pageIndex)
         else { return }
 
-        let destination = PDFDestination(
-            page: page,
-            at: CGPoint(x: selected.bounds.midX, y: selected.bounds.maxY + 48)
-        )
-        view.pdfView.go(to: destination)
-
-        let fitScale = view.pdfView.scaleFactorForSizeToFit
-        let targetScale = min(max(fitScale * 1.25, view.pdfView.scaleFactor), 2.0)
-        if targetScale.isFinite, targetScale > 0 {
-            view.pdfView.scaleFactor = targetScale
+        let pdfRect = view.pdfView.convert(selected.bounds.insetBy(dx: -24, dy: -36), from: page)
+        if let documentView = view.pdfView.documentView {
+            let documentRect = documentView.convert(pdfRect, from: view.pdfView)
+            let visibleRect = documentView.visibleRect
+            if visibleRect.insetBy(dx: 80, dy: 120).contains(documentRect) {
+                return
+            }
+            documentView.scrollToVisible(documentRect.insetBy(dx: -120, dy: -160))
+        } else {
+            let destination = PDFDestination(
+                page: page,
+                at: CGPoint(x: selected.bounds.midX, y: selected.bounds.maxY + 48)
+            )
+            view.pdfView.go(to: destination)
         }
     }
 
@@ -76,6 +83,7 @@ public struct PDFKitDocumentView: NSViewRepresentable {
 public final class PDFCanvasView: NSView {
     public let pdfView = PDFView()
     public let overlayView = FieldOverlayView()
+    public var onPageChanged: ((Int) -> Void)?
 
     override public init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -113,6 +121,9 @@ public final class PDFCanvasView: NSView {
     }
 
     @objc private func pdfViewChanged() {
+        if let page = pdfView.currentPage, let index = pdfView.document?.index(for: page) {
+            onPageChanged?(index)
+        }
         overlayView.needsDisplay = true
     }
 }
@@ -210,7 +221,7 @@ public final class FieldOverlayView: NSView {
     private func drawText(_ text: String, in rect: CGRect) {
         let bounds = rect.insetBy(dx: 4, dy: 2)
         guard bounds.width > 2, bounds.height > 2 else { return }
-        let fontSize = fittedFontSize(for: text, in: bounds)
+        let fontSize = PDFFieldTextSizer.previewFontSize(for: text, in: rect)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byClipping
         let attributes: [NSAttributedString.Key: Any] = [
@@ -231,25 +242,14 @@ public final class FieldOverlayView: NSView {
     private func drawCheckbox(in rect: CGRect) {
         let bounds = rect.insetBy(dx: max(2, rect.width * 0.18), dy: max(2, rect.height * 0.18))
         let path = NSBezierPath()
-        path.move(to: CGPoint(x: bounds.minX, y: bounds.midY))
-        path.line(to: CGPoint(x: bounds.midX - 1, y: bounds.minY))
+        path.move(to: CGPoint(x: bounds.minX, y: bounds.minY))
         path.line(to: CGPoint(x: bounds.maxX, y: bounds.maxY))
+        path.move(to: CGPoint(x: bounds.minX, y: bounds.maxY))
+        path.line(to: CGPoint(x: bounds.maxX, y: bounds.minY))
         path.lineWidth = 2
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
         NSColor.controlAccentColor.setStroke()
         path.stroke()
-    }
-
-    private func fittedFontSize(for text: String, in bounds: CGRect) -> CGFloat {
-        var size = min(max(bounds.height * 0.72, 8), 18)
-        while size > 6 {
-            let measured = (text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size)])
-            if measured.width <= bounds.width && measured.height <= bounds.height + 2 {
-                return size
-            }
-            size -= 0.5
-        }
-        return 6
     }
 }

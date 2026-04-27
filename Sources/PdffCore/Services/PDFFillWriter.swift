@@ -55,6 +55,9 @@ public enum PDFFillWriter {
             case .checkbox:
                 annotation.buttonWidgetStateString = field.boolValue ? "Yes" : "Off"
             case .text, .date, .choice:
+                annotation.font = NSFont.systemFont(
+                    ofSize: PDFFieldTextSizer.exportFontSize(for: field.value, in: field.bounds)
+                )
                 annotation.widgetStringValue = field.value
             case .signature:
                 break
@@ -96,7 +99,7 @@ public enum PDFFillWriter {
     private static func drawText(_ text: String, in bounds: CGRect) {
         guard bounds.width > 1, bounds.height > 1 else { return }
         let insetBounds = bounds.insetBy(dx: 2, dy: 2)
-        let fontSize = fittedFontSize(for: text, in: insetBounds)
+        let fontSize = PDFFieldTextSizer.exportFontSize(for: text, in: bounds)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byClipping
         paragraph.alignment = .left
@@ -144,19 +147,6 @@ public enum PDFFillWriter {
         }
     }
 
-    private static func fittedFontSize(for text: String, in bounds: CGRect) -> CGFloat {
-        guard bounds.width > 0, bounds.height > 0 else { return 8 }
-        var size = min(max(bounds.height * 0.72, 8), 18)
-        while size > 6 {
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size)]
-            let measured = (text as NSString).size(withAttributes: attributes)
-            if measured.width <= bounds.width && measured.height <= bounds.height + 2 {
-                return size
-            }
-            size -= 0.5
-        }
-        return 6
-    }
 }
 
 public enum PDFFillWriterError: LocalizedError {

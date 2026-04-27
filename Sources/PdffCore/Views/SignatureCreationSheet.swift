@@ -43,7 +43,7 @@ public struct SignatureCreationSheet: View {
                 switch mode {
                 case .draw:
                     SignatureDrawingPad(strokes: $strokes)
-                        .frame(height: 180)
+                        .frame(height: 220)
                         .background(.white, in: RoundedRectangle(cornerRadius: 8))
                         .overlay {
                             RoundedRectangle(cornerRadius: 8)
@@ -60,10 +60,10 @@ public struct SignatureCreationSheet: View {
 
                 case .type:
                     TextField("Typed signature", text: $typedName)
-                        .font(.system(size: 28, weight: .regular, design: .serif))
+                        .font(.custom("Snell Roundhand", size: 30))
                         .textFieldStyle(.roundedBorder)
                     TypedSignaturePreview(text: typedName)
-                        .frame(height: 120)
+                        .frame(height: 150)
                         .frame(maxWidth: .infinity)
                         .background(.white, in: RoundedRectangle(cornerRadius: 8))
                         .overlay {
@@ -91,7 +91,7 @@ public struct SignatureCreationSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 620)
     }
 
     private func save() {
@@ -112,7 +112,9 @@ public struct SignatureCreationSheet: View {
                 }
                 data = try SignatureRenderer.renderTyped(text)
             }
-            onSave(name, data)
+            let finalName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let inferredName = typedName.trimmingCharacters(in: .whitespacesAndNewlines)
+            onSave(finalName.isEmpty ? (inferredName.isEmpty ? "Signature" : inferredName) : finalName, data)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -138,11 +140,17 @@ private struct TypedSignaturePreview: View {
 
     var body: some View {
         Text(text.isEmpty ? "Signature" : text)
-            .font(.system(size: 44, weight: .regular, design: .serif))
-            .italic()
-            .foregroundStyle(text.isEmpty ? .secondary : .primary)
+            .font(.custom("Snell Roundhand", size: 58))
+            .foregroundStyle(text.isEmpty ? Color.secondary : Color.black.opacity(0.78))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 20)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(.gray.opacity(0.18))
+                    .frame(height: 1)
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 36)
+            }
     }
 }
 
@@ -172,10 +180,17 @@ private final class DrawingPadView: NSView {
         NSColor.white.setFill()
         dirtyRect.fill()
 
+        NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
+        let baseline = NSBezierPath()
+        baseline.move(to: CGPoint(x: 28, y: bounds.height - 42))
+        baseline.line(to: CGPoint(x: bounds.width - 28, y: bounds.height - 42))
+        baseline.lineWidth = 1
+        baseline.stroke()
+
         NSColor.black.setStroke()
         for stroke in strokes where stroke.count > 1 {
             let path = NSBezierPath()
-            path.lineWidth = 2.4
+            path.lineWidth = 1.45
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
             path.move(to: stroke[0])
@@ -221,7 +236,7 @@ private enum SignatureRenderer {
 
         for stroke in strokes where stroke.count > 1 {
             let path = NSBezierPath()
-            path.lineWidth = max(2.6, 3.2 * scale)
+            path.lineWidth = min(max(1.15 * sqrt(scale), 1.15), 2.2)
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
             path.move(to: transform(stroke[0], scale: scale, xOffset: xOffset, yOffset: yOffset))
@@ -240,13 +255,13 @@ private enum SignatureRenderer {
         NSColor.clear.setFill()
         CGRect(origin: .zero, size: size).fill()
 
-        let fallback = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 82), toHaveTrait: .italicFontMask)
-        let font = NSFont(name: "Snell Roundhand", size: 92) ?? fallback
+        let fallback = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 78), toHaveTrait: .italicFontMask)
+        let font = NSFont(name: "Snell Roundhand", size: 88) ?? fallback
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: NSColor.black,
+            .foregroundColor: NSColor.black.withAlphaComponent(0.78),
             .paragraphStyle: paragraph
         ]
         let attributed = NSAttributedString(string: text, attributes: attributes)

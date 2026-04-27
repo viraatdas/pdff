@@ -15,6 +15,7 @@ public final class DocumentWorkspace: ObservableObject {
     @Published public var isAILabeling = false
     @Published public var aiProvider: AIProviderChoice = .openAI
     @Published public var aiAPIKey = ""
+    @Published public var visiblePageIndex = 0
 
     public let memoryStore: MemoryStore
     public let signatureStore: SignatureStore
@@ -66,6 +67,7 @@ public final class DocumentWorkspace: ObservableObject {
         documentURL = url
         fields = FieldDetector.detect(in: loaded)
         placedSignatures = []
+        visiblePageIndex = 0
         selectedFieldID = fields.first?.id
 
         if fields.isEmpty {
@@ -187,21 +189,36 @@ public final class DocumentWorkspace: ObservableObject {
     }
 
     public func placeSignature(_ asset: SignatureAsset) {
-        guard let target = currentField ?? fields.first else { return }
+        guard document != nil else { return }
         let bounds: CGRect
-        if target.kind == .signature {
-            bounds = target.bounds
+        let pageIndex: Int
+
+        if let target = currentField {
+            pageIndex = target.pageIndex
+            if target.kind == .signature {
+                bounds = signatureBounds(for: asset, fitting: target.bounds)
+            } else {
+                let height = max(target.bounds.height, 36)
+                bounds = signatureBounds(
+                    for: asset,
+                    fitting: CGRect(
+                        x: target.bounds.minX,
+                        y: max(0, target.bounds.minY - height - 8),
+                        width: max(target.bounds.width, 180),
+                        height: height
+                    )
+                )
+            }
         } else {
-            let height = max(target.bounds.height, 36)
-            bounds = CGRect(
-                x: target.bounds.minX,
-                y: max(0, target.bounds.minY - height - 8),
-                width: max(target.bounds.width, 160),
-                height: height
+            pageIndex = min(max(visiblePageIndex, 0), max((document?.pageCount ?? 1) - 1, 0))
+            let pageBounds = document?.page(at: pageIndex)?.bounds(for: .mediaBox) ?? CGRect(x: 0, y: 0, width: 612, height: 792)
+            bounds = signatureBounds(
+                for: asset,
+                fitting: CGRect(x: pageBounds.midX - 100, y: pageBounds.midY - 32, width: 200, height: 64)
             )
         }
 
-        placedSignatures.append(PlacedSignature(assetID: asset.id, pageIndex: target.pageIndex, bounds: bounds))
+        placedSignatures.append(PlacedSignature(assetID: asset.id, pageIndex: pageIndex, bounds: clamped(bounds, pageIndex: pageIndex)))
         if let currentIndex, fields[currentIndex].kind == .signature {
             var updated = fields[currentIndex]
             updated.value = asset.id.uuidString
@@ -209,6 +226,30 @@ public final class DocumentWorkspace: ObservableObject {
             nextField()
         }
         Haptics.step()
+    }
+
+    public func updateVisiblePageIndex(_ index: Int) {
+        visiblePageIndex = index
+    }
+
+    private func signatureBounds(for asset: SignatureAsset, fitting target: CGRect) -> CGRect {
+        let aspectRatio = signatureAspectRatio(asset) ?? 3.0
+        let targetWidth = max(target.width, 150)
+        let targetHeight = max(target.height, 42)
+        let widthByHeight = targetHeight * aspectRatio
+        let width = min(max(targetWidth, widthByHeight), 280)
+        let height = min(max(width / aspectRatio, 28), max(targetHeight, 72))
+        return CGRect(
+            x: target.midX - width / 2,
+            y: target.midY - height / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    private func signatureAspectRatio(_ asset: SignatureAsset) -> CGFloat? {
+        guard let image = NSImage(data: asset.pngData), image.size.height > 0 else { return nil }
+        return max(image.size.width / image.size.height, 1.8)
     }
 
     public func removePlacedSignature(id: UUID) {
@@ -263,6 +304,9 @@ public final class DocumentWorkspace: ObservableObject {
         case .checkbox:
             annotation.buttonWidgetStateString = field.boolValue ? "Yes" : "Off"
         case .text, .date, .choice:
+            annotation.font = NSFont.systemFont(
+                ofSize: PDFFieldTextSizer.exportFontSize(for: field.value, in: field.bounds)
+            )
             annotation.widgetStringValue = field.value
         case .signature:
             break
